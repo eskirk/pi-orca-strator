@@ -35,7 +35,7 @@ pi install ./pi-orca-strator
 From GitHub after publishing:
 
 ```bash
-pi install git:github.com/<owner>/pi-orca-strator
+pi install git:github.com/eskirk/pi-orca-strator
 ```
 
 For a one-off local test:
