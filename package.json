@@ -1,0 +1,9 @@
+{
+  "name": "pi-orca-strator",
+  "version": "0.1.0",
+  "description": "Pi commands for cloning sessions into Orca tabs and worktrees.",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./extensions/orca-session-commands.ts"]
+  }
+}
