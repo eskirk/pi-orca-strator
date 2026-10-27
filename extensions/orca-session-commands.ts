@@ -136,6 +136,42 @@ function resolveProject(projects: OrcaProject[], query: string): OrcaProject {
   )
 }
 
+type BreachRequest = {
+  project: OrcaProject
+  worktreeName?: string
+}
+
+function parseBreachArguments(projects: OrcaProject[], args: string): BreachRequest {
+  const input = args.trim()
+  if (!input) throw new Error("usage: /breach <project-name-or-path> [worktree-name]")
+
+  let fullInputError: unknown
+  try {
+    return { project: resolveProject(projects, input) }
+  } catch (error) {
+    fullInputError = error
+  }
+
+  let ambiguousProjectError: Error | undefined
+  const separators = [...input.matchAll(/\s+/g)].reverse()
+  for (const separator of separators) {
+    const splitAt = separator.index ?? 0
+    const projectQuery = input.slice(0, splitAt).trim()
+    const worktreeName = input.slice(splitAt + separator[0].length).trim()
+    if (!projectQuery || !worktreeName) continue
+
+    try {
+      return { project: resolveProject(projects, projectQuery), worktreeName }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("is ambiguous")) {
+        ambiguousProjectError = error
+      }
+    }
+  }
+
+  throw ambiguousProjectError ?? fullInputError
+}
+
 function getWorktree(payload: unknown): JsonRecord {
   const root = asRecord(payload)
   const result = asRecord(root?.result) ?? root
@@ -263,29 +299,48 @@ export default function (pi: { exec: Function; registerCommand: Function }) {
   })
 
   pi.registerCommand("breach", {
-    description: "Clone this session into an Orca project",
+    description: "Clone this session into a new Orca project worktree",
     handler: async (args: string, ctx: ExtensionContext) => {
-      await runCommand(ctx, "handing off Pi session", async () => {
-        const projectQuery = args.trim()
-        if (!projectQuery) {
-          throw new Error("usage: /breach <project-name-or-path>")
+      await runCommand(ctx, "creating project worktree and handing off Pi session", async () => {
+        if (!args.trim()) {
+          throw new Error("usage: /breach <project-name-or-path> [worktree-name]")
         }
 
         const payload = await runOrca(pi, ctx.cwd, ["repo", "list", "--json"])
-        const project = resolveProject(getProjects(payload), projectQuery)
+        const request = parseBreachArguments(getProjects(payload), args)
+        const project = request.project
         const source = await getForkSource(ctx)
-        const sessionName = `breach-${ctx.sessionManager.getSessionId().slice(0, 8)}`
-        const worktree = `id:${project.id}::${project.path}`
+        const worktreeName =
+          request.worktreeName ?? `breach-${ctx.sessionManager.getSessionId().slice(0, 8)}-${randomUUID().slice(0, 8)}`
+        const worktreePayload = await runOrca(pi, ctx.cwd, [
+          "worktree",
+          "create",
+          "--repo",
+          `id:${project.id}`,
+          "--name",
+          worktreeName,
+          "--parent-worktree",
+          `id:${project.id}::${project.path}`,
+          "--activate",
+          "--json",
+        ])
+        const worktree = getWorktree(worktreePayload)
 
-        await createTerminal(
-          pi,
-          ctx.cwd,
-          worktree,
-          `pi: breach ${project.displayName}`,
-          { ...source, isExactBranchClone: false },
-          sessionName,
-        )
-        ctx.ui.notify(`handed off Pi session to ${project.displayName}`, "info")
+        try {
+          await createTerminal(
+            pi,
+            ctx.cwd,
+            `id:${String(worktree.id)}`,
+            `pi: breach ${project.displayName}`,
+            { ...source, isExactBranchClone: false },
+            worktreeName,
+          )
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          throw new Error(`created worktree ${worktreeName}, but could not open Pi: ${message}`)
+        }
+
+        ctx.ui.notify(`handed off Pi session to ${project.displayName} in ${worktreeName}`, "info")
       })
     },
   })

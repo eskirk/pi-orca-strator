@@ -6,13 +6,13 @@ A Pi extension for cloning the current session into Orca tabs, worktrees, and pr
 
 ```text
 /spawn
-/breach <project-name-or-path>
+/breach <project-name-or-path> [worktree-name]
 /migrate
 /migrate <worktree-name>
 ```
 
 - `/spawn` opens a cloned session in a new tab in the current Orca worktree.
-- `/breach <project-name-or-path>` opens a cloned session in the selected Orca project's root worktree. Match a project by its display name or full path.
+- `/breach <project-name-or-path> [worktree-name]` creates and activates a new worktree in the selected Orca project, then opens a cloned session there. Match a project by its display name or full path; if omitted, the worktree name is generated.
 - `/migrate` creates a new worktree from the repository's default branch and opens the cloned session there.
 - migrated worktrees keep Orca lineage to the original worktree through `--parent-worktree active`.
 
