@@ -24,6 +24,12 @@ type ForkSource = {
   isExactBranchClone: boolean
 }
 
+type OrcaProject = {
+  id: string
+  displayName: string
+  path: string
+}
+
 type JsonRecord = Record<string, unknown>
 
 const STATUS_KEY = "orca-session-commands"
@@ -87,6 +93,47 @@ function buildPiCommand(source: ForkSource, sessionName: string): string {
   const piCommand = process.env.PI_CLI_COMMAND || "pi"
   const mode = source.isExactBranchClone ? "--session" : "--fork"
   return [piCommand, mode, source.path, "--name", sessionName].map(shellQuote).join(" ")
+}
+
+function getProjects(payload: unknown): OrcaProject[] {
+  const root = asRecord(payload)
+  const result = asRecord(root?.result) ?? root
+  const projects = result?.repos
+  if (!Array.isArray(projects)) {
+    throw new Error("orca did not return the project list")
+  }
+
+  return projects.flatMap((value) => {
+    const project = asRecord(value)
+    if (
+      !project ||
+      typeof project.id !== "string" ||
+      typeof project.displayName !== "string" ||
+      typeof project.path !== "string"
+    ) {
+      return []
+    }
+    return [{ id: project.id, displayName: project.displayName, path: project.path }]
+  })
+}
+
+function resolveProject(projects: OrcaProject[], query: string): OrcaProject {
+  const pathMatch = projects.find((project) => project.path === query)
+  if (pathMatch) return pathMatch
+
+  const nameMatches = projects.filter((project) => project.displayName === query)
+  if (nameMatches.length === 1) return nameMatches[0]
+
+  if (nameMatches.length > 1) {
+    throw new Error(`project name "${query}" is ambiguous; use its full path`)
+  }
+
+  const availableProjects = projects.map((project) => `${project.displayName} (${project.path})`).join(", ")
+  throw new Error(
+    availableProjects
+      ? `project "${query}" was not found. available projects: ${availableProjects}`
+      : `project "${query}" was not found; no Orca projects are available`,
+  )
 }
 
 function getWorktree(payload: unknown): JsonRecord {
@@ -211,6 +258,34 @@ export default function (pi: { exec: Function; registerCommand: Function }) {
         const sessionName = `spawn-${ctx.sessionManager.getSessionId().slice(0, 8)}`
         await createTerminal(pi, ctx.cwd, "active", "pi: spawn", source, sessionName)
         ctx.ui.notify("spawned a cloned Pi session in a new Orca tab", "info")
+      })
+    },
+  })
+
+  pi.registerCommand("breach", {
+    description: "Clone this session into an Orca project",
+    handler: async (args: string, ctx: ExtensionContext) => {
+      await runCommand(ctx, "handing off Pi session", async () => {
+        const projectQuery = args.trim()
+        if (!projectQuery) {
+          throw new Error("usage: /breach <project-name-or-path>")
+        }
+
+        const payload = await runOrca(pi, ctx.cwd, ["repo", "list", "--json"])
+        const project = resolveProject(getProjects(payload), projectQuery)
+        const source = await getForkSource(ctx)
+        const sessionName = `breach-${ctx.sessionManager.getSessionId().slice(0, 8)}`
+        const worktree = `id:${project.id}::${project.path}`
+
+        await createTerminal(
+          pi,
+          ctx.cwd,
+          worktree,
+          `pi: breach ${project.displayName}`,
+          { ...source, isExactBranchClone: false },
+          sessionName,
+        )
+        ctx.ui.notify(`handed off Pi session to ${project.displayName}`, "info")
       })
     },
   })

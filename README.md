@@ -1,16 +1,18 @@
 # pi-orca-strator
 
-A Pi extension for cloning the current session into Orca tabs and worktrees.
+A Pi extension for cloning the current session into Orca tabs, worktrees, and projects.
 
 ## commands
 
 ```text
 /spawn
+/breach <project-name-or-path>
 /migrate
 /migrate <worktree-name>
 ```
 
 - `/spawn` opens a cloned session in a new tab in the current Orca worktree.
+- `/breach <project-name-or-path>` opens a cloned session in the selected Orca project's root worktree. Match a project by its display name or full path.
 - `/migrate` creates a new worktree from the repository's default branch and opens the cloned session there.
 - migrated worktrees keep Orca lineage to the original worktree through `--parent-worktree active`.
 
