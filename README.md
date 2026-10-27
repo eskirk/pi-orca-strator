@@ -34,10 +34,16 @@ From a local checkout:
 pi install ./pi-orca-strator
 ```
 
-From GitHub after publishing:
+From GitHub (tracks the default branch):
 
 ```bash
 pi install git:github.com/eskirk/pi-orca-strator
+```
+
+Pi installs directly from the GitHub repository; no npm publish or GitHub release is needed. Update it with:
+
+```bash
+pi update git:github.com/eskirk/pi-orca-strator
 ```
 
 For a one-off local test:
